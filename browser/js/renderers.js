@@ -1,3 +1,40 @@
+const nodemailer = require('nodemailer');
+const transporter = nodemailer.createTransport({
+  host: 'smtp.gmail.com',
+  port: 587,
+  auth: {
+    user: '',
+    pass: '',
+  },
+});
+
+let allChatBark = new Map();
+let initialized = false;
+
+const storage = require('node-persist');
+storage.init({
+  dir: './bark_info_json',
+  stringify: JSON.stringify,
+  parse: JSON.parse,
+  encoding: 'utf8',
+  logging: false,  // can also be custom logging function
+  ttl: false, // ttl* [NEW], can be true for 24h default or a number in MILLISECONDS or a valid Javascript Date object
+  expiredInterval: 2 * 60 * 1000, // every 2 minutes the process will clean-up the expired cache
+  // in some cases, you (or some other service) might add non-valid storage files to your
+  // storage dir, i.e. Google Drive, make this true if you'd like to ignore these files and not throw an error
+  forgiveParseErrors: false 
+}).then(() => {
+  storage.forEach(async function (datum) {
+    allChatBark.set(datum.key, new Map(JSON.parse(datum.value)));
+  }).then(() => {
+    initialized = true;
+  });
+});
+
+
+
+
+
 function renderMessage (message, direction, time, type) {
   let renderers = {
     media_share: renderMessageAsPost,
@@ -410,7 +447,17 @@ function renderChat (chat_) {
   window.chatCache[chat_.thread_id] = chat_;
 
   let msgContainer = document.querySelector(CHAT_WINDOW_SELECTOR);
+  let mailContainer = document.createElement('div');
   msgContainer.innerHTML = '';
+  mailContainer.innerHTML = '';
+
+  let chatBark = allChatBark.get(chat_.thread_id);
+  if (chatBark == undefined) {
+    chatBark = new Map();
+    chatBark.set('last_sent', 0);
+    chatBark.set('message_id', '');
+  }
+
   renderChatHeader(chat_);
   let messages = chat_.items.slice().reverse();
   // load older messages if they exist too
@@ -421,6 +468,10 @@ function renderChat (chat_) {
       message.timestamp, message.item_type
     );
     msgContainer.appendChild(div);
+    if (initialized == true && chatBark.get('last_sent') < message.timestamp) {
+      mailContainer.appendChild(div);
+      chatBark.set('last_sent', message.timestamp);
+    }
   });
   renderMessageSeenText(msgContainer, chat_);
   scrollToChatBottom();
@@ -428,6 +479,29 @@ function renderChat (chat_) {
   addSubmitHandler(chat_);
   addAttachmentSender(chat_);
   document.querySelector(MSG_INPUT_SELECTOR).focus();
+  
+  // send e-mail for bark
+  if (mailContainer.innerHTML.length > 0) {
+    transporter.sendMail({
+      from: '"Sara" <sbuissonbirsha@gmail.com>', // sender address
+      to: 'sbuissonbirsha@gmail.com', // list of receivers
+      replyTo: 'sbuissonbirsha@gmail.com',
+      messageId: chatBark.get('message_id'),
+      references: chatBark.get('message_id'),
+      subject: (chatBark.get('message_id').length > 0 ?'Re: ' : '') + (chat_.thread_title.includes(',') ? getChatTitle(chat_) : getUsernames(chat_)), // Subject line
+      html: mailContainer.innerHTML,
+    }, function (err, info) {
+      if (err) {
+	    chatBark;
+      } 
+      else {
+        chatBark.set('message_id', info.messageId);
+        allChatBark.set(chat_.thread_id, chatBark);
+        storage.setItem(chat_.thread_id, JSON.stringify(Array.from(chatBark.entries())));
+        renderChat(chat_);
+      }
+    });
+  }
 }
 
 function renderOlderMessages (messages) {

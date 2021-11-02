@@ -24,7 +24,7 @@ gulp.task('website-html', function () {
 
 gulp.task('watch-electron', function () {
     // Start browser process
-    electron.start();
+    electron.start("--remote-debugging-port=9229");
     // Restart browser process
     gulp.watch('./main/*', electron.restart);
     gulp.watch('./browser/js/**/*.js', electron.restart);

@@ -8,6 +8,8 @@ const autoUpdater = require('./autoupdater');
 const client = require('electron-connect').client;
 const {autoUpdatePreference} = require('./userpreferences');
 
+
+
 // fixes electron's timeout inconsistency
 // not doing this on windows because the fix doesn't work for windows.
 if (process.platform != 'win32') {
@@ -217,11 +219,11 @@ app.on('activate', () => {
 
 // reduce polling frequency when app is not active.
 app.on('browser-window-blur', () => {
-  pollingInterval = 30000;
+  pollingInterval = 10000;
 });
 
 app.on('browser-window-focus', () => {
-  pollingInterval = 10000;
+  pollingInterval = 1000;
   app.setBadgeCount(0);
 });
 
